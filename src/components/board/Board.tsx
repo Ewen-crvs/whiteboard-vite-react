@@ -1,26 +1,35 @@
-import React, { ReactElement } from 'react';
-import { io, Socket } from 'socket.io-client';
-
-import './style.css';
+import React, { ReactElement } from "react";
+import { io, Socket } from "socket.io-client";
+import "./style.css";
 
 interface BoardProps {
     color: string;
-    shape: 'line' | 'rectangle' | 'circle' | 'freeform';
+    shape: "line" | "rectangle" | "circle" | "freeform";
     penSize: number;
     isShapeFilled: boolean;
 }
-
-interface BoardState {}
 
 interface MousePosition {
     x: number;
     y: number;
 }
 
-class Board extends React.Component<BoardProps, BoardState> {
+interface DrawingData {
+    shape: string;
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+    color: string;
+    penSize: number;
+    isFilled: boolean;
+}
+
+class Board extends React.Component<BoardProps> {
     private canvasRef = React.createRef<HTMLCanvasElement>();
-    timeout: NodeJS.Timeout | null = null;
-    socket: Socket = io("10.26.129.232:3000");
+    socket: Socket = io("localhost:3001", {
+        transports: ["websocket"],
+    });
     ctx: CanvasRenderingContext2D | null = null;
     isDrawing: boolean = false;
     startPos: MousePosition = { x: 0, y: 0 };
@@ -30,17 +39,17 @@ class Board extends React.Component<BoardProps, BoardState> {
     constructor(props: BoardProps) {
         super(props);
 
-        this.socket.on("canvas-data", (data: string) => {
-            const image = new Image();
-            const canvas = this.canvasRef.current;
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-            
-            image.onload = () => {
-                ctx.drawImage(image, 0, 0);
-            };
-            image.src = data;
+        this.socket.on("load-drawings", (drawings: DrawingData[]) => {
+            this.clearBoard(false);
+            drawings.forEach((data) => this.drawShape(data));
+        });
+
+        this.socket.on("draw", (data: DrawingData) => {
+            this.drawShape(data);
+        });
+
+        this.socket.on("clear", () => {
+            this.clearBoard(false);
         });
     }
 
@@ -48,178 +57,161 @@ class Board extends React.Component<BoardProps, BoardState> {
         this.setupCanvas();
     }
 
-    componentDidUpdate(prevProps: BoardProps): void {
-        if (!this.ctx) return;
-        
-        if (prevProps.color !== this.props.color) {
-            this.ctx.strokeStyle = this.props.color;
-            this.ctx.fillStyle = this.props.color;
-        }
-        if (prevProps.penSize !== this.props.penSize) {
-            this.ctx.lineWidth = this.props.penSize;
-        }
-    }
-
-    clearBoard = (): void => {
+    clearBoard = (emit: boolean = true): void => {
         if (!this.ctx || !this.canvasRef.current) return;
-        const canvas = this.canvasRef.current;
-        this.ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        const base64ImageData = canvas.toDataURL("image/png");
-        this.socket.emit("canvas-data", base64ImageData);
-    }
+        this.ctx.clearRect(
+            0,
+            0,
+            this.canvasRef.current.width,
+            this.canvasRef.current.height
+        );
+        if (emit) this.socket.emit("clear");
+    };
 
     getMousePos = (e: MouseEvent): MousePosition => {
         const canvas = this.canvasRef.current;
         if (!canvas) return { x: 0, y: 0 };
-        
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
 
-        // Allow drawing slightly outside canvas bounds
-        const margin = 100; // pixels
-        return {
-            x: Math.max(-margin, Math.min(canvas.width + margin, x)),
-            y: Math.max(-margin, Math.min(canvas.height + margin, y))
-        };
+        const rect = canvas.getBoundingClientRect();
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     };
 
-    drawShape(currentPos: MousePosition): void {
+    drawShape(data: DrawingData): void {
         if (!this.ctx) return;
 
         const ctx = this.ctx;
         ctx.beginPath();
+        ctx.strokeStyle = data.color;
+        ctx.lineWidth = data.penSize;
+        ctx.fillStyle = data.color;
 
-        switch (this.props.shape) {
-            case 'line':
-                ctx.moveTo(this.startPos.x, this.startPos.y);
-                ctx.lineTo(currentPos.x, currentPos.y);
+        switch (data.shape) {
+            case "line":
+                ctx.moveTo(data.startX, data.startY);
+                ctx.lineTo(data.endX, data.endY);
                 ctx.stroke();
                 break;
-            case 'rectangle': {
-                const width = currentPos.x - this.startPos.x;
-                const height = currentPos.y - this.startPos.y;
-                if (this.props.isShapeFilled) {
-                    ctx.fillRect(this.startPos.x, this.startPos.y, width, height);
+            case "rectangle":
+                if (data.isFilled) {
+                    ctx.fillRect(
+                        data.startX,
+                        data.startY,
+                        data.endX - data.startX,
+                        data.endY - data.startY
+                    );
                 } else {
-                    ctx.strokeRect(this.startPos.x, this.startPos.y, width, height);
+                    ctx.strokeRect(
+                        data.startX,
+                        data.startY,
+                        data.endX - data.startX,
+                        data.endY - data.startY
+                    );
                 }
                 break;
-            }
-            case 'circle': {
+            case "circle":
                 const radius = Math.sqrt(
-                    Math.pow(currentPos.x - this.startPos.x, 2) + 
-                    Math.pow(currentPos.y - this.startPos.y, 2)
+                    Math.pow(data.endX - data.startX, 2) +
+                        Math.pow(data.endY - data.startY, 2)
                 );
-                ctx.arc(this.startPos.x, this.startPos.y, radius, 0, 2 * Math.PI);
-                if (this.props.isShapeFilled) {
+                ctx.arc(data.startX, data.startY, radius, 0, 2 * Math.PI);
+                if (data.isFilled) {
                     ctx.fill();
                 } else {
                     ctx.stroke();
                 }
                 break;
-            }
-            case 'freeform':
-                ctx.moveTo(this.startPos.x, this.startPos.y);
-                ctx.lineTo(currentPos.x, currentPos.y);
-                ctx.stroke();
-                this.startPos = { ...currentPos };
-                break;
         }
-
         ctx.closePath();
     }
 
     finishDrawing = (): void => {
-        if (!this.isDrawing || !this.ctx || !this.canvasRef.current) return;
-
-        if (this.props.shape !== 'freeform') {
-            const currentPos = this.lastPos;
-
-            if (this.baseImageData) {
-                this.ctx.putImageData(this.baseImageData, 0, 0);
-                this.drawShape(currentPos);
-            }
-        }
-
+        if (!this.isDrawing || !this.ctx) return;
         this.isDrawing = false;
         this.baseImageData = null;
 
-        if (this.timeout !== null) clearTimeout(this.timeout);
-        this.timeout = setTimeout(() => {
-            if (!this.canvasRef.current) return;
-            const base64ImageData = this.canvasRef.current.toDataURL("image/png");
-            this.socket.emit("canvas-data", base64ImageData);
-        }, 10);
+        this.socket.emit("draw", {
+            shape: this.props.shape,
+            startX: this.startPos.x,
+            startY: this.startPos.y,
+            endX: this.lastPos.x,
+            endY: this.lastPos.y,
+            color: this.props.color,
+            penSize: this.props.penSize,
+            isFilled: this.props.isShapeFilled,
+        });
     };
 
     setupCanvas(): void {
         const canvas = this.canvasRef.current;
         if (!canvas) return;
-
-        this.ctx = canvas.getContext('2d');
+        this.ctx = canvas.getContext("2d");
         if (!this.ctx) return;
 
-        const updateCanvasSize = () => {
-            const rect = canvas.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = rect.height;
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
 
-            this.ctx!.lineWidth = this.props.penSize;
-            this.ctx!.lineJoin = 'round';
-            this.ctx!.lineCap = 'round';
-            this.ctx!.strokeStyle = this.props.color;
-            this.ctx!.fillStyle = this.props.color;
-        };
-
-        updateCanvasSize();
-        window.addEventListener('resize', updateCanvasSize);
-
-        // Add canvas-level event listeners
-        canvas.addEventListener('mousedown', this.handleMouseDown);
-
-        // Add window-level event listeners for continuous drawing
-        window.addEventListener('mousemove', this.handleMouseMove);
-        window.addEventListener('mouseup', this.handleMouseUp);
+        canvas.addEventListener("mousedown", this.handleMouseDown);
+        canvas.addEventListener("mousemove", this.handleMouseMove);
+        canvas.addEventListener("mouseup", this.handleMouseUp);
     }
 
     handleMouseDown = (e: MouseEvent): void => {
-        const canvas = this.canvasRef.current;
-        if (!canvas) return;
-
         this.isDrawing = true;
         this.startPos = this.getMousePos(e);
         this.lastPos = this.startPos;
-
-        if (this.ctx) {
-            this.baseImageData = this.ctx.getImageData(0, 0, canvas.width, canvas.height);
-        }
+        if (this.ctx)
+            this.baseImageData = this.ctx.getImageData(
+                0,
+                0,
+                this.canvasRef.current!.width,
+                this.canvasRef.current!.height
+            );
     };
 
     handleMouseMove = (e: MouseEvent): void => {
-        if (!this.isDrawing || !this.ctx || !this.canvasRef.current) return;
-        
-        const currentPos = this.getMousePos(e);
-        this.lastPos = currentPos;
+        if (!this.isDrawing || !this.ctx) return;
+        this.lastPos = this.getMousePos(e);
 
-        if (this.props.shape === 'freeform') {
-            this.drawShape(currentPos);
-        } else if (this.baseImageData) {
-            this.ctx.putImageData(this.baseImageData, 0, 0);
-            this.drawShape(currentPos);
+        if (this.props.shape === "freeform") {
+            this.drawShape({
+                shape: "line",
+                startX: this.startPos.x,
+                startY: this.startPos.y,
+                endX: this.lastPos.x,
+                endY: this.lastPos.y,
+                color: this.props.color,
+                penSize: this.props.penSize,
+                isFilled: false,
+            });
+            this.socket.emit("draw", {
+                shape: "line",
+                startX: this.startPos.x,
+                startY: this.startPos.y,
+                endX: this.lastPos.x,
+                endY: this.lastPos.y,
+                color: this.props.color,
+                penSize: this.props.penSize,
+                isFilled: false,
+            });
+            this.startPos = { ...this.lastPos };
+        } else {
+            this.ctx.putImageData(this.baseImageData!, 0, 0);
+            this.drawShape({
+                shape: this.props.shape,
+                startX: this.startPos.x,
+                startY: this.startPos.y,
+                endX: this.lastPos.x,
+                endY: this.lastPos.y,
+                color: this.props.color,
+                penSize: this.props.penSize,
+                isFilled: this.props.isShapeFilled,
+            });
         }
     };
 
     handleMouseUp = (): void => {
         this.finishDrawing();
     };
-
-    componentWillUnmount(): void {
-        window.removeEventListener('mousemove', this.handleMouseMove);
-        window.removeEventListener('mouseup', this.handleMouseUp);
-        window.removeEventListener('resize', this.setupCanvas);
-    }
 
     render(): ReactElement {
         return (
