@@ -6,6 +6,8 @@ import './style.css';
 interface BoardProps {
     color: string;
     shape: 'line' | 'rectangle' | 'circle' | 'freeform';
+    penSize: number;
+    isShapeFilled: boolean;
 }
 
 interface BoardState {}
@@ -22,6 +24,7 @@ class Board extends React.Component<BoardProps, BoardState> {
     ctx: CanvasRenderingContext2D | null = null;
     isDrawing: boolean = false;
     startPos: MousePosition = { x: 0, y: 0 };
+    lastPos: MousePosition = { x: 0, y: 0 };
     baseImageData: ImageData | null = null;
 
     constructor(props: BoardProps) {
@@ -46,8 +49,14 @@ class Board extends React.Component<BoardProps, BoardState> {
     }
 
     componentDidUpdate(prevProps: BoardProps): void {
-        if (prevProps.color !== this.props.color && this.ctx) {
+        if (!this.ctx) return;
+        
+        if (prevProps.color !== this.props.color) {
             this.ctx.strokeStyle = this.props.color;
+            this.ctx.fillStyle = this.props.color;
+        }
+        if (prevProps.penSize !== this.props.penSize) {
+            this.ctx.lineWidth = this.props.penSize;
         }
     }
 
@@ -65,9 +74,14 @@ class Board extends React.Component<BoardProps, BoardState> {
         if (!canvas) return { x: 0, y: 0 };
         
         const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        // Allow drawing slightly outside canvas bounds
+        const margin = 100; // pixels
         return {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
+            x: Math.max(-margin, Math.min(canvas.width + margin, x)),
+            y: Math.max(-margin, Math.min(canvas.height + margin, y))
         };
     };
 
@@ -81,89 +95,47 @@ class Board extends React.Component<BoardProps, BoardState> {
             case 'line':
                 ctx.moveTo(this.startPos.x, this.startPos.y);
                 ctx.lineTo(currentPos.x, currentPos.y);
+                ctx.stroke();
                 break;
-            case 'rectangle':
+            case 'rectangle': {
                 const width = currentPos.x - this.startPos.x;
                 const height = currentPos.y - this.startPos.y;
-                ctx.strokeRect(this.startPos.x, this.startPos.y, width, height);
+                if (this.props.isShapeFilled) {
+                    ctx.fillRect(this.startPos.x, this.startPos.y, width, height);
+                } else {
+                    ctx.strokeRect(this.startPos.x, this.startPos.y, width, height);
+                }
                 break;
-            case 'circle':
+            }
+            case 'circle': {
                 const radius = Math.sqrt(
                     Math.pow(currentPos.x - this.startPos.x, 2) + 
                     Math.pow(currentPos.y - this.startPos.y, 2)
                 );
                 ctx.arc(this.startPos.x, this.startPos.y, radius, 0, 2 * Math.PI);
+                if (this.props.isShapeFilled) {
+                    ctx.fill();
+                } else {
+                    ctx.stroke();
+                }
                 break;
+            }
             case 'freeform':
                 ctx.moveTo(this.startPos.x, this.startPos.y);
                 ctx.lineTo(currentPos.x, currentPos.y);
+                ctx.stroke();
                 this.startPos = { ...currentPos };
                 break;
         }
 
-        if (this.props.shape !== 'rectangle') {
-            ctx.stroke();
-        }
         ctx.closePath();
     }
 
-    setupCanvas(): void {
-        const canvas = this.canvasRef.current;
-        if (!canvas) return;
-
-        this.ctx = canvas.getContext('2d');
-        if (!this.ctx) return;
-
-        const updateCanvasSize = () => {
-            const rect = canvas.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = rect.height;
-
-            this.ctx!.lineWidth = 3;
-            this.ctx!.lineJoin = 'round';
-            this.ctx!.lineCap = 'round';
-            this.ctx!.strokeStyle = this.props.color;
-        };
-
-        updateCanvasSize();
-        window.addEventListener('resize', updateCanvasSize);
-
-        canvas.addEventListener('mousedown', this.handleMouseDown);
-        canvas.addEventListener('mousemove', this.handleMouseMove);
-        canvas.addEventListener('mouseup', this.handleMouseUp);
-        canvas.addEventListener('mouseleave', this.handleMouseLeave);
-    }
-
-    handleMouseDown = (e: MouseEvent): void => {
-        const canvas = this.canvasRef.current;
-        if (!canvas) return;
-
-        this.isDrawing = true;
-        this.startPos = this.getMousePos(e);
-
-        if (this.ctx) {
-            this.baseImageData = this.ctx.getImageData(0, 0, canvas.width, canvas.height);
-        }
-    };
-
-    handleMouseMove = (e: MouseEvent): void => {
-        if (!this.isDrawing || !this.ctx || !this.canvasRef.current) return;
-        
-        const currentPos = this.getMousePos(e);
-
-        if (this.props.shape === 'freeform') {
-            this.drawShape(currentPos);
-        } else if (this.baseImageData) {
-            this.ctx.putImageData(this.baseImageData, 0, 0);
-            this.drawShape(currentPos);
-        }
-    };
-
-    handleMouseUp = (e: MouseEvent): void => {
+    finishDrawing = (): void => {
         if (!this.isDrawing || !this.ctx || !this.canvasRef.current) return;
 
         if (this.props.shape !== 'freeform') {
-            const currentPos = this.getMousePos(e);
+            const currentPos = this.lastPos;
 
             if (this.baseImageData) {
                 this.ctx.putImageData(this.baseImageData, 0, 0);
@@ -182,13 +154,72 @@ class Board extends React.Component<BoardProps, BoardState> {
         }, 10);
     };
 
-    handleMouseLeave = (): void => {
-        if (this.isDrawing && this.ctx && this.baseImageData) {
-            this.ctx.putImageData(this.baseImageData, 0, 0);
-            this.isDrawing = false;
-            this.baseImageData = null;
+    setupCanvas(): void {
+        const canvas = this.canvasRef.current;
+        if (!canvas) return;
+
+        this.ctx = canvas.getContext('2d');
+        if (!this.ctx) return;
+
+        const updateCanvasSize = () => {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+
+            this.ctx!.lineWidth = this.props.penSize;
+            this.ctx!.lineJoin = 'round';
+            this.ctx!.lineCap = 'round';
+            this.ctx!.strokeStyle = this.props.color;
+            this.ctx!.fillStyle = this.props.color;
+        };
+
+        updateCanvasSize();
+        window.addEventListener('resize', updateCanvasSize);
+
+        // Add canvas-level event listeners
+        canvas.addEventListener('mousedown', this.handleMouseDown);
+
+        // Add window-level event listeners for continuous drawing
+        window.addEventListener('mousemove', this.handleMouseMove);
+        window.addEventListener('mouseup', this.handleMouseUp);
+    }
+
+    handleMouseDown = (e: MouseEvent): void => {
+        const canvas = this.canvasRef.current;
+        if (!canvas) return;
+
+        this.isDrawing = true;
+        this.startPos = this.getMousePos(e);
+        this.lastPos = this.startPos;
+
+        if (this.ctx) {
+            this.baseImageData = this.ctx.getImageData(0, 0, canvas.width, canvas.height);
         }
     };
+
+    handleMouseMove = (e: MouseEvent): void => {
+        if (!this.isDrawing || !this.ctx || !this.canvasRef.current) return;
+        
+        const currentPos = this.getMousePos(e);
+        this.lastPos = currentPos;
+
+        if (this.props.shape === 'freeform') {
+            this.drawShape(currentPos);
+        } else if (this.baseImageData) {
+            this.ctx.putImageData(this.baseImageData, 0, 0);
+            this.drawShape(currentPos);
+        }
+    };
+
+    handleMouseUp = (): void => {
+        this.finishDrawing();
+    };
+
+    componentWillUnmount(): void {
+        window.removeEventListener('mousemove', this.handleMouseMove);
+        window.removeEventListener('mouseup', this.handleMouseUp);
+        window.removeEventListener('resize', this.setupCanvas);
+    }
 
     render(): ReactElement {
         return (

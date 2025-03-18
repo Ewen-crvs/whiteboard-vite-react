@@ -7,10 +7,6 @@
     position: relative;
 }
 
-.color-picker-container {
-    text-align: center;
-}
-
 .toolbar {
     display: flex;
     gap: 20px;
@@ -36,17 +32,68 @@
     color: #333;
 }
 
-.shape-selector {
-    padding: 6px 12px;
+.shape-buttons {
+    display: flex;
+    gap: 4px;
+}
+
+.shape-button {
+    width: 36px;
+    height: 36px;
     border: 1px solid #ddd;
     border-radius: 4px;
     background-color: white;
-    font-size: 14px;
+    color: #666;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.shape-button:hover {
+    background-color: #f0f0f0;
+    border-color: #999;
+    color: #333;
+}
+
+.shape-button.active {
+    background-color: #e3f2fd;
+    border-color: #2196f3;
+    color: #2196f3;
+}
+
+.shape-button i {
+    font-size: 16px;
+}
+
+.color-picker {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
     cursor: pointer;
 }
 
-.shape-selector:hover {
-    border-color: #999;
+.color-picker::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.color-picker::-webkit-color-swatch {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.pen-size-slider {
+    width: 100px;
+    cursor: pointer;
+}
+
+.pen-size-value {
+    min-width: 40px;
+    font-size: 14px;
+    color: #333;
 }
 
 .clear-button {
