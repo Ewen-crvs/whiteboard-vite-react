@@ -1,7 +1,22 @@
 {
-  "dependencies": {
-    "express": "^4.21.2",
-    "socket-io": "^1.0.0",
-    "socket.io": "^4.8.1"
-  }
+    "name": "server",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "dev": "concurrently -k -n \"Typescript,Node\" -p \"[{name}]\" -c \"blue,green\" \"tsc --watch\" \"nodemon dist/server.js\"",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "author": "",
+    "license": "ISC",
+    "devDependencies": {
+        "@types/express": "^5.0.0",
+        "@types/node": "^22.13.10",
+        "concurrently": "^9.1.2",
+        "nodemon": "^3.1.9",
+        "typescript": "^5.8.2"
+    },
+    "dependencies": {
+        "express": "^4.21.2"
+    }
 }
