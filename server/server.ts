@@ -3,47 +3,49 @@ import http from "http";
 import { Server, Socket } from "socket.io";
 import cors from "cors";
 
-// Initialisation de l'application express
 const app = express();
 const server = http.createServer(app);
 
-// Initialisation de Socket.IO avec CORS configuré pour accepter toutes les origines
 const io = new Server(server, {
     cors: {
-        origin: "*", // Permet à tous les domaines de se connecter
+        origin: "*",
         methods: ["GET", "POST"],
     },
 });
 
-// Tableau pour stocker les dessins
-let drawings: any[] = [];
+const drawings: { [channel: string]: any[] } = {};
 
-// Connexion du client via socket
 io.on("connection", (socket: Socket) => {
     console.log("Un utilisateur s'est connecté");
 
-    // Envoyer les dessins existants à l'utilisateur qui se connecte
-    socket.emit("load-drawings", drawings);
-
-    // Écouter les nouveaux dessins
-    socket.on("draw", (data) => {
-        drawings.push(data);
-        io.emit("draw", data); // Diffuse le dessin à tous les clients connectés
+    socket.on("join-channel", (channel: string) => {
+        socket.join(channel);
+        if (!drawings[channel]) {
+            drawings[channel] = [];
+        }
+        socket.emit("load-drawings", drawings[channel]);
+        console.log(`Utilisateur rejoint le channel: ${channel}`);
     });
 
-    // Écouter l'événement "clear" pour effacer le tableau
-    socket.on("clear", () => {
-        drawings = [];
-        io.emit("clear"); // Diffuse le message "clear" à tous les clients pour effacer le tableau
+    socket.on("draw", ({ channel, shape }) => {
+        if (!drawings[channel]) {
+            drawings[channel] = [];
+        }
+        drawings[channel].push(shape);
+        io.to(channel).emit("draw", shape);
     });
 
-    // Lors de la déconnexion d'un utilisateur
+    socket.on("clear", (channel: string) => {
+        drawings[channel] = [];
+        io.to(channel).emit("clear");
+        console.log(`Clear demandé pour le channel ${channel}`);
+    });
+
     socket.on("disconnect", () => {
         console.log("Un utilisateur s'est déconnecté");
     });
 });
 
-// Démarrage du serveur
 server.listen(3001, () => {
     console.log("Serveur en écoute sur http://localhost:3001");
 });
