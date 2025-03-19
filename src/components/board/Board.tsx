@@ -1,10 +1,10 @@
-import React, { ReactElement } from "react";
-import { io, Socket } from "socket.io-client";
-import "./style.css";
+import React, { ReactElement } from 'react';
+import { io, Socket } from 'socket.io-client';
+import './style.css';
 
 interface BoardProps {
     color: string;
-    shape: "line" | "rectangle" | "circle" | "freeform";
+    shape: 'line' | 'rectangle' | 'circle' | 'freeform';
     penSize: number;
     isShapeFilled: boolean;
 }
@@ -55,7 +55,37 @@ class Board extends React.Component<BoardProps> {
 
     componentDidMount(): void {
         this.setupCanvas();
+        window.addEventListener('resize', this.handleResize);
     }
+
+    componentDidUpdate(prevProps: BoardProps): void {
+        if (!this.ctx) return;
+        
+        if (prevProps.color !== this.props.color) {
+            this.ctx.strokeStyle = this.props.color;
+            this.ctx.fillStyle = this.props.color;
+        }
+        if (prevProps.penSize !== this.props.penSize) {
+            this.ctx.lineWidth = this.props.penSize;
+        }
+    }
+
+    handleResize = (): void => {
+        const canvas = this.canvasRef.current;
+        if (!canvas || !this.ctx) return;
+
+        const parent = canvas.parentElement;
+        if (!parent) return;
+
+        canvas.width = parent.clientWidth;
+        canvas.height = parent.clientHeight;
+
+        this.ctx.lineWidth = this.props.penSize;
+        this.ctx.lineJoin = 'round';
+        this.ctx.lineCap = 'round';
+        this.ctx.strokeStyle = this.props.color;
+        this.ctx.fillStyle = this.props.color;
+    };
 
     clearBoard = (emit: boolean = true): void => {
         if (!this.ctx || !this.canvasRef.current) return;
@@ -73,7 +103,10 @@ class Board extends React.Component<BoardProps> {
         if (!canvas) return { x: 0, y: 0 };
 
         const rect = canvas.getBoundingClientRect();
-        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        return {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        };
     };
 
     drawShape(data: DrawingData): void {
@@ -91,6 +124,7 @@ class Board extends React.Component<BoardProps> {
                 ctx.lineTo(data.endX, data.endY);
                 ctx.stroke();
                 break;
+
             case "rectangle":
                 if (data.isFilled) {
                     ctx.fillRect(
@@ -108,10 +142,11 @@ class Board extends React.Component<BoardProps> {
                     );
                 }
                 break;
+
             case "circle":
                 const radius = Math.sqrt(
                     Math.pow(data.endX - data.startX, 2) +
-                        Math.pow(data.endY - data.startY, 2)
+                    Math.pow(data.endY - data.startY, 2)
                 );
                 ctx.arc(data.startX, data.startY, radius, 0, 2 * Math.PI);
                 if (data.isFilled) {
@@ -120,6 +155,12 @@ class Board extends React.Component<BoardProps> {
                     ctx.stroke();
                 }
                 break;
+
+            case "freeform":
+                ctx.moveTo(data.startX, data.startY);
+                ctx.lineTo(data.endX, data.endY);
+                ctx.stroke();
+                break;
         }
         ctx.closePath();
     }
@@ -127,28 +168,39 @@ class Board extends React.Component<BoardProps> {
     finishDrawing = (): void => {
         if (!this.isDrawing || !this.ctx) return;
         this.isDrawing = false;
-        this.baseImageData = null;
 
-        this.socket.emit("draw", {
-            shape: this.props.shape,
-            startX: this.startPos.x,
-            startY: this.startPos.y,
-            endX: this.lastPos.x,
-            endY: this.lastPos.y,
-            color: this.props.color,
-            penSize: this.props.penSize,
-            isFilled: this.props.isShapeFilled,
-        });
+        if (this.props.shape !== "freeform") {
+            this.socket.emit("draw", {
+                shape: this.props.shape,
+                startX: this.startPos.x,
+                startY: this.startPos.y,
+                endX: this.lastPos.x,
+                endY: this.lastPos.y,
+                color: this.props.color,
+                penSize: this.props.penSize,
+                isFilled: this.props.isShapeFilled,
+            });
+        }
     };
 
     setupCanvas(): void {
         const canvas = this.canvasRef.current;
         if (!canvas) return;
+
         this.ctx = canvas.getContext("2d");
         if (!this.ctx) return;
 
-        canvas.width = canvas.clientWidth;
-        canvas.height = canvas.clientHeight;
+        const parent = canvas.parentElement;
+        if (!parent) return;
+
+        canvas.width = parent.clientWidth;
+        canvas.height = parent.clientHeight;
+
+        this.ctx.lineWidth = this.props.penSize;
+        this.ctx.lineJoin = 'round';
+        this.ctx.lineCap = 'round';
+        this.ctx.strokeStyle = this.props.color;
+        this.ctx.fillStyle = this.props.color;
 
         canvas.addEventListener("mousedown", this.handleMouseDown);
         canvas.addEventListener("mousemove", this.handleMouseMove);
@@ -159,13 +211,15 @@ class Board extends React.Component<BoardProps> {
         this.isDrawing = true;
         this.startPos = this.getMousePos(e);
         this.lastPos = this.startPos;
-        if (this.ctx)
+
+        if (this.ctx && this.canvasRef.current) {
             this.baseImageData = this.ctx.getImageData(
                 0,
                 0,
-                this.canvasRef.current!.width,
-                this.canvasRef.current!.height
+                this.canvasRef.current.width,
+                this.canvasRef.current.height
             );
+        }
     };
 
     handleMouseMove = (e: MouseEvent): void => {
@@ -174,7 +228,7 @@ class Board extends React.Component<BoardProps> {
 
         if (this.props.shape === "freeform") {
             this.drawShape({
-                shape: "line",
+                shape: "freeform",
                 startX: this.startPos.x,
                 startY: this.startPos.y,
                 endX: this.lastPos.x,
@@ -183,8 +237,9 @@ class Board extends React.Component<BoardProps> {
                 penSize: this.props.penSize,
                 isFilled: false,
             });
+            
             this.socket.emit("draw", {
-                shape: "line",
+                shape: "freeform",
                 startX: this.startPos.x,
                 startY: this.startPos.y,
                 endX: this.lastPos.x,
@@ -193,9 +248,10 @@ class Board extends React.Component<BoardProps> {
                 penSize: this.props.penSize,
                 isFilled: false,
             });
+            
             this.startPos = { ...this.lastPos };
-        } else {
-            this.ctx.putImageData(this.baseImageData!, 0, 0);
+        } else if (this.baseImageData) {
+            this.ctx.putImageData(this.baseImageData, 0, 0);
             this.drawShape({
                 shape: this.props.shape,
                 startX: this.startPos.x,
@@ -213,10 +269,20 @@ class Board extends React.Component<BoardProps> {
         this.finishDrawing();
     };
 
+    componentWillUnmount(): void {
+        window.removeEventListener('resize', this.handleResize);
+        const canvas = this.canvasRef.current;
+        if (canvas) {
+            canvas.removeEventListener("mousedown", this.handleMouseDown);
+            canvas.removeEventListener("mousemove", this.handleMouseMove);
+            canvas.removeEventListener("mouseup", this.handleMouseUp);
+        }
+    }
+
     render(): ReactElement {
         return (
-            <div id="sketch" className="sketch">
-                <canvas ref={this.canvasRef} className="board"></canvas>
+            <div id="sketch" className="sketch" style={{ width: '100%', height: '100%' }}>
+                <canvas ref={this.canvasRef} style={{ width: '100%', height: '100%', border: '1px solid #ccc' }} />
             </div>
         );
     }
