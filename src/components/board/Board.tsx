@@ -1,289 +1,404 @@
-import React, { ReactElement } from 'react';
+import React from 'react';
+import { Stage, Layer, Line, Circle, Rect, Image } from 'react-konva';
+import { KonvaEventObject } from 'konva/lib/Node';
 import { io, Socket } from 'socket.io-client';
-import './style.css';
 
-interface BoardProps {
-    color: string;
-    shape: 'line' | 'rectangle' | 'circle' | 'freeform';
-    penSize: number;
-    isShapeFilled: boolean;
-}
-
-interface MousePosition {
+interface Point {
     x: number;
     y: number;
 }
 
-interface DrawingData {
-    shape: string;
-    startX: number;
-    startY: number;
-    endX: number;
-    endY: number;
-    color: string;
-    penSize: number;
-    isFilled: boolean;
+export interface ShapeProps {
+    id: string;
+    points?: number[];
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    stroke: string;
+    strokeWidth: number;
+    fill?: string;
+    type: 'line' | 'rectangle' | 'circle' | 'freeform' | 'image';
+    image?: HTMLImageElement;
 }
 
-class Board extends React.Component<BoardProps> {
-    public canvasRef = React.createRef<HTMLCanvasElement>();
-    socket: Socket = io(`${import.meta.env.VITE_SERVER_URL}:${import.meta.env.VITE_SERVER_PORT}`, {
-        transports: ["websocket"],
-    });
-    ctx: CanvasRenderingContext2D | null = null;
-    isDrawing: boolean = false;
-    startPos: MousePosition = { x: 0, y: 0 };
-    lastPos: MousePosition = { x: 0, y: 0 };
-    baseImageData: ImageData | null = null;
+interface BoardProps {
+    shape: 'line' | 'rectangle' | 'circle' | 'freeform' | 'eraser' | 'hand';
+    color: string;
+    penSize: number;
+    isShapeFilled: boolean;
+}
+
+interface BoardState {
+    shapes: ShapeProps[];
+    isDrawing: boolean;
+    currentPoints: number[];
+    mousePos: Point | null;
+    currentDragId: string | null;
+}
+
+class Board extends React.Component<BoardProps, BoardState> {
+    public stageRef = React.createRef<any>();
+    private socket: Socket;
 
     constructor(props: BoardProps) {
         super(props);
+        this.state = {
+            shapes: [],
+            isDrawing: false,
+            currentPoints: [],
+            mousePos: null,
+            currentDragId: null,
+        };
 
-        this.socket.on("load-drawings", (drawings: DrawingData[]) => {
-            this.clearBoard(false);
-            drawings.forEach((data) => this.drawShape(data));
+        this.socket = io(`${import.meta.env.VITE_SERVER_URL}:${import.meta.env.VITE_SERVER_PORT}`, {
+            transports: ["websocket"],
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000
         });
 
-        this.socket.on("draw", (data: DrawingData) => {
-            this.drawShape(data);
+        this.socket.on("draw", (shape: ShapeProps) => {
+            // Only add the shape if it doesn't already exist
+            this.setState(prevState => ({
+                shapes: prevState.shapes.some(s => s.id === shape.id) 
+                    ? prevState.shapes 
+                    : [...prevState.shapes, shape]
+            }));
+        });
+
+        this.socket.on("shape-moved", (data: { id: string; x: number; y: number }) => {
+            if (data.id === this.state.currentDragId) return;
+            
+            this.setState(prevState => ({
+                shapes: prevState.shapes.map(shape => 
+                    shape.id === data.id 
+                        ? { ...shape, x: data.x, y: data.y }
+                        : shape
+                )
+            }));
         });
 
         this.socket.on("clear", () => {
-            this.clearBoard(false);
+            this.setState({ shapes: [], currentDragId: null });
         });
     }
 
-    componentDidMount(): void {
-        this.setupCanvas();
-        window.addEventListener('resize', this.handleResize);
-    }
-
-    componentDidUpdate(prevProps: BoardProps): void {
-        if (!this.ctx) return;
-        
-        if (prevProps.color !== this.props.color) {
-            this.ctx.strokeStyle = this.props.color;
-            this.ctx.fillStyle = this.props.color;
-        }
-        if (prevProps.penSize !== this.props.penSize) {
-            this.ctx.lineWidth = this.props.penSize;
-        }
-    }
-
-    handleResize = (): void => {
-        const canvas = this.canvasRef.current;
-        if (!canvas || !this.ctx) return;
-
-        const parent = canvas.parentElement;
-        if (!parent) return;
-
-        canvas.width = parent.clientWidth;
-        canvas.height = parent.clientHeight;
-
-        this.ctx.lineWidth = this.props.penSize;
-        this.ctx.lineJoin = 'round';
-        this.ctx.lineCap = 'round';
-        this.ctx.strokeStyle = this.props.color;
-        this.ctx.fillStyle = this.props.color;
-    };
-
-    clearBoard = (emit: boolean = true): void => {
-        if (!this.ctx || !this.canvasRef.current) return;
-        this.ctx.clearRect(
-            0,
-            0,
-            this.canvasRef.current.width,
-            this.canvasRef.current.height
-        );
-        if (emit) this.socket.emit("clear");
-    };
-
-    getMousePos = (e: MouseEvent): MousePosition => {
-        const canvas = this.canvasRef.current;
-        if (!canvas) return { x: 0, y: 0 };
-
-        const rect = canvas.getBoundingClientRect();
-        return {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
-        };
-    };
-
-    drawShape(data: DrawingData): void {
-        if (!this.ctx) return;
-
-        const ctx = this.ctx;
-        ctx.beginPath();
-        ctx.strokeStyle = data.color;
-        ctx.lineWidth = data.penSize;
-        ctx.fillStyle = data.color;
-
-        switch (data.shape) {
-            case "line":
-                ctx.moveTo(data.startX, data.startY);
-                ctx.lineTo(data.endX, data.endY);
-                ctx.stroke();
-                break;
-
-            case "rectangle":
-                if (data.isFilled) {
-                    ctx.fillRect(
-                        data.startX,
-                        data.startY,
-                        data.endX - data.startX,
-                        data.endY - data.startY
-                    );
-                } else {
-                    ctx.strokeRect(
-                        data.startX,
-                        data.startY,
-                        data.endX - data.startX,
-                        data.endY - data.startY
-                    );
-                }
-                break;
-
-            case "circle":
-                const radius = Math.sqrt(
-                    Math.pow(data.endX - data.startX, 2) +
-                    Math.pow(data.endY - data.startY, 2)
-                );
-                ctx.arc(data.startX, data.startY, radius, 0, 2 * Math.PI);
-                if (data.isFilled) {
-                    ctx.fill();
-                } else {
-                    ctx.stroke();
-                }
-                break;
-
-            case "freeform":
-                ctx.moveTo(data.startX, data.startY);
-                ctx.lineTo(data.endX, data.endY);
-                ctx.stroke();
-                break;
-        }
-        ctx.closePath();
-    }
-
-    finishDrawing = (): void => {
-        if (!this.isDrawing || !this.ctx) return;
-        this.isDrawing = false;
-
-        if (this.props.shape !== "freeform") {
-            this.socket.emit("draw", {
-                shape: this.props.shape,
-                startX: this.startPos.x,
-                startY: this.startPos.y,
-                endX: this.lastPos.x,
-                endY: this.lastPos.y,
-                color: this.props.color,
-                penSize: this.props.penSize,
-                isFilled: this.props.isShapeFilled,
-            });
-        }
-    };
-
-    setupCanvas(): void {
-        const canvas = this.canvasRef.current;
-        if (!canvas) return;
-
-        this.ctx = canvas.getContext("2d");
-        if (!this.ctx) return;
-
-        const parent = canvas.parentElement;
-        if (!parent) return;
-
-        canvas.width = parent.clientWidth;
-        canvas.height = parent.clientHeight;
-
-        this.ctx.lineWidth = this.props.penSize;
-        this.ctx.lineJoin = 'round';
-        this.ctx.lineCap = 'round';
-        this.ctx.strokeStyle = this.props.color;
-        this.ctx.fillStyle = this.props.color;
-
-        canvas.addEventListener("mousedown", this.handleMouseDown);
-        canvas.addEventListener("mousemove", this.handleMouseMove);
-        canvas.addEventListener("mouseup", this.handleMouseUp);
-    }
-
-    handleMouseDown = (e: MouseEvent): void => {
-        this.isDrawing = true;
-        this.startPos = this.getMousePos(e);
-        this.lastPos = this.startPos;
-
-        if (this.ctx && this.canvasRef.current) {
-            this.baseImageData = this.ctx.getImageData(
-                0,
-                0,
-                this.canvasRef.current.width,
-                this.canvasRef.current.height
-            );
-        }
-    };
-
-    handleMouseMove = (e: MouseEvent): void => {
-        if (!this.isDrawing || !this.ctx) return;
-        this.lastPos = this.getMousePos(e);
-
-        if (this.props.shape === "freeform") {
-            this.drawShape({
-                shape: "freeform",
-                startX: this.startPos.x,
-                startY: this.startPos.y,
-                endX: this.lastPos.x,
-                endY: this.lastPos.y,
-                color: this.props.color,
-                penSize: this.props.penSize,
-                isFilled: false,
-            });
-            
-            this.socket.emit("draw", {
-                shape: "freeform",
-                startX: this.startPos.x,
-                startY: this.startPos.y,
-                endX: this.lastPos.x,
-                endY: this.lastPos.y,
-                color: this.props.color,
-                penSize: this.props.penSize,
-                isFilled: false,
-            });
-            
-            this.startPos = { ...this.lastPos };
-        } else if (this.baseImageData) {
-            this.ctx.putImageData(this.baseImageData, 0, 0);
-            this.drawShape({
-                shape: this.props.shape,
-                startX: this.startPos.x,
-                startY: this.startPos.y,
-                endX: this.lastPos.x,
-                endY: this.lastPos.y,
-                color: this.props.color,
-                penSize: this.props.penSize,
-                isFilled: this.props.isShapeFilled,
-            });
-        }
-    };
-
-    handleMouseUp = (): void => {
-        this.finishDrawing();
-    };
-
     componentWillUnmount(): void {
-        window.removeEventListener('resize', this.handleResize);
-        const canvas = this.canvasRef.current;
-        if (canvas) {
-            canvas.removeEventListener("mousedown", this.handleMouseDown);
-            canvas.removeEventListener("mousemove", this.handleMouseMove);
-            canvas.removeEventListener("mouseup", this.handleMouseUp);
+        if (this.socket) {
+            this.socket.disconnect();
         }
     }
 
-    render(): ReactElement {
+    componentDidUpdate(prevProps: BoardProps) {
+        if (this.props.shape !== prevProps.shape) {
+            const stage = this.stageRef.current;
+            if (stage) {
+                if (this.props.shape === 'hand') {
+                    stage.container().style.cursor = 'grab';
+                } else if (this.props.shape === 'eraser') {
+                    stage.container().style.cursor = 'crosshair';
+                } else {
+                    stage.container().style.cursor = 'default';
+                }
+            }
+        }
+    }
+
+    addShape = (shape: ShapeProps): void => {
+        this.setState(prevState => ({
+            shapes: [...prevState.shapes, shape]
+        }));
+        this.socket.emit("draw", shape);
+    };
+
+    handleMouseDown = (e: KonvaEventObject<MouseEvent>): void => {
+        if (this.props.shape === 'hand') {
+            const stage = this.stageRef.current;
+            if (stage) {
+                stage.container().style.cursor = 'grabbing';
+            }
+            return;
+        }
+
+        const stage = e.target.getStage();
+        if (!stage) return;
+
+        const pos = stage.getPointerPosition();
+        if (!pos) return;
+
+        this.setState({
+            isDrawing: true,
+            currentPoints: [pos.x, pos.y]
+        });
+    };
+
+    handleMouseMove = (e: KonvaEventObject<MouseEvent>): void => {
+        if (this.props.shape === 'hand') {
+            return;
+        }
+
+        if (!this.state.isDrawing) return;
+
+        const stage = e.target.getStage();
+        if (!stage) return;
+
+        const point = stage.getPointerPosition();
+        if (!point) return;
+
+        // For shapes, we only need start point and current point
+        if (this.props.shape === 'rectangle' || this.props.shape === 'circle') {
+            this.setState({
+                currentPoints: [
+                    this.state.currentPoints[0],
+                    this.state.currentPoints[1],
+                    point.x,
+                    point.y
+                ]
+            });
+        } 
+        // For freeform and eraser, we append points
+        else if (this.props.shape === 'freeform' || this.props.shape === 'eraser') {
+            this.setState(prevState => ({
+                currentPoints: [...prevState.currentPoints, point.x, point.y]
+            }));
+        }
+        // For line, we update end point
+        else if (this.props.shape === 'line') {
+            this.setState({
+                currentPoints: [
+                    this.state.currentPoints[0],
+                    this.state.currentPoints[1],
+                    point.x,
+                    point.y
+                ]
+            });
+        }
+    };
+
+    handleMouseUp = (e: KonvaEventObject<MouseEvent>): void => {
+        if (this.props.shape === 'hand') {
+            const stage = this.stageRef.current;
+            if (stage) {
+                stage.container().style.cursor = 'grab';
+            }
+            return;
+        }
+
+        if (!this.state.isDrawing) return;
+
+        const stage = e.target.getStage();
+        if (!stage) return;
+
+        const point = stage.getPointerPosition();
+        if (!point) return;
+
+        this.setState({ isDrawing: false });
+
+        const id = Math.random().toString();
+        const newShape: ShapeProps = {
+            id,
+            points: this.state.currentPoints,
+            stroke: this.props.shape === 'eraser' ? '#ffffff' : this.props.color,
+            strokeWidth: this.props.penSize,
+            type: this.props.shape === 'eraser' ? 'freeform' : this.props.shape as ShapeProps['type'],
+            fill: this.props.isShapeFilled ? this.props.color : 'transparent'
+        };
+
+        if (this.props.shape === 'rectangle' || this.props.shape === 'circle') {
+            const startPoint = {
+                x: this.state.currentPoints[0],
+                y: this.state.currentPoints[1]
+            };
+            newShape.x = Math.min(startPoint.x, point.x);
+            newShape.y = Math.min(startPoint.y, point.y);
+            newShape.width = Math.abs(point.x - startPoint.x);
+            newShape.height = Math.abs(point.y - startPoint.y);
+            delete newShape.points;
+        }
+
+        this.setState(prevState => ({
+            shapes: [...prevState.shapes, newShape]
+        }));
+
+        this.socket.emit("draw", newShape);
+    };
+
+    handleDragStart = (_e: KonvaEventObject<DragEvent>, id: string): void => {
+        if (this.props.shape !== 'hand') return;
+        this.setState({ currentDragId: id });
+    };
+
+    handleDragMove = (e: KonvaEventObject<DragEvent>, id: string) => {
+        if (this.props.shape !== 'hand') return;
+        
+        const shape = e.target;
+        const newX = shape.x();
+        const newY = shape.y();
+
+        // Update position locally
+        this.setState(prevState => ({
+            shapes: prevState.shapes.map(s => 
+                s.id === id ? { ...s, x: newX, y: newY } : s
+            )
+        }));
+
+        // Notify other clients
+        this.socket.emit("shape-moved", { id, x: newX, y: newY });
+    };
+
+    handleDragEnd = (e: KonvaEventObject<DragEvent>, id: string) => {
+        if (this.props.shape !== 'hand') return;
+
+        const shape = e.target;
+        const newX = shape.x();
+        const newY = shape.y();
+
+        this.setState(prevState => ({
+            shapes: prevState.shapes.map(s => 
+                s.id === id ? { ...s, x: newX, y: newY } : s
+            ),
+            currentDragId: null
+        }));
+
+        this.socket.emit("shape-moved", { id, x: newX, y: newY });
+    };
+
+    clearBoard = (): void => {
+        const stage = this.stageRef.current;
+        if (stage) {
+            const layer = stage.getLayers()[0];
+            layer.removeChildren();
+            layer.batchDraw();
+        }
+        this.setState({ shapes: [], currentDragId: null });
+        this.socket.emit("clear");
+    };
+
+    render(): React.ReactNode {
         return (
-            <div id="sketch" className="sketch" style={{ width: '100%', height: '100%' }}>
-                <canvas ref={this.canvasRef} style={{ width: '100%', height: '100%', border: '1px solid #ccc' }} />
-            </div>
+            <Stage
+                ref={this.stageRef}
+                width={window.innerWidth}
+                height={window.innerHeight - 100}
+                onMouseDown={this.handleMouseDown}
+                onMouseMove={this.handleMouseMove}
+                onMouseUp={this.handleMouseUp}
+                style={{ backgroundColor: 'white' }}
+            >
+                <Layer>
+                    {this.state.shapes.map((shape, i) => {
+                        if (shape.type === 'freeform' || shape.type === 'line') {
+                            return (
+                                <Line
+                                    key={i}
+                                    points={shape.points}
+                                    stroke={shape.stroke}
+                                    strokeWidth={shape.strokeWidth}
+                                    tension={0.5}
+                                    lineCap="round"
+                                    globalCompositeOperation={
+                                        shape.stroke === '#ffffff' ? 'destination-out' : 'source-over'
+                                    }
+                                    draggable={this.props.shape === 'hand'}
+                                    onDragStart={(e) => this.handleDragStart(e, shape.id)}
+                                    onDragMove={(e) => this.handleDragMove(e, shape.id)}
+                                    onDragEnd={(e) => this.handleDragEnd(e, shape.id)}
+                                />
+                            );
+                        } else if (shape.type === 'rectangle') {
+                            return (
+                                <Rect
+                                    key={i}
+                                    x={shape.x}
+                                    y={shape.y}
+                                    width={shape.width}
+                                    height={shape.height}
+                                    stroke={shape.stroke}
+                                    strokeWidth={shape.strokeWidth}
+                                    fill={shape.fill}
+                                    draggable={this.props.shape === 'hand'}
+                                    onDragStart={(e) => this.handleDragStart(e, shape.id)}
+                                    onDragMove={(e) => this.handleDragMove(e, shape.id)}
+                                    onDragEnd={(e) => this.handleDragEnd(e, shape.id)}
+                                />
+                            );
+                        } else if (shape.type === 'circle') {
+                            return (
+                                <Circle
+                                    key={i}
+                                    x={shape.x! + shape.width! / 2}
+                                    y={shape.y! + shape.height! / 2}
+                                    radius={Math.max(shape.width!, shape.height!) / 2}
+                                    stroke={shape.stroke}
+                                    strokeWidth={shape.strokeWidth}
+                                    fill={shape.fill}
+                                    draggable={this.props.shape === 'hand'}
+                                    onDragStart={(e) => this.handleDragStart(e, shape.id)}
+                                    onDragMove={(e) => this.handleDragMove(e, shape.id)}
+                                    onDragEnd={(e) => this.handleDragEnd(e, shape.id)}
+                                />
+                            );
+                        } else if (shape.type === 'image' && shape.image) {
+                            return (
+                                <Image
+                                    key={i}
+                                    x={shape.x}
+                                    y={shape.y}
+                                    width={shape.width}
+                                    height={shape.height}
+                                    image={shape.image}
+                                    draggable={this.props.shape === 'hand'}
+                                    onDragStart={(e) => this.handleDragStart(e, shape.id)}
+                                    onDragMove={(e) => this.handleDragMove(e, shape.id)}
+                                    onDragEnd={(e) => this.handleDragEnd(e, shape.id)}
+                                />
+                            );
+                        }
+                        return null;
+                    })}
+                    {this.state.isDrawing && (
+                        <>
+                            {(this.props.shape === 'freeform' || this.props.shape === 'line' || this.props.shape === 'eraser') && (
+                                <Line
+                                    points={this.state.currentPoints}
+                                    stroke={this.props.shape === 'eraser' ? '#ffffff' : this.props.color}
+                                    strokeWidth={this.props.penSize}
+                                    tension={0.5}
+                                    lineCap="round"
+                                    globalCompositeOperation={
+                                        this.props.shape === 'eraser' ? 'destination-out' : 'source-over'
+                                    }
+                                />
+                            )}
+                            {this.props.shape === 'rectangle' && this.state.currentPoints.length >= 2 && (
+                                <Rect
+                                    x={Math.min(this.state.currentPoints[0], this.state.currentPoints[2] || this.state.currentPoints[0])}
+                                    y={Math.min(this.state.currentPoints[1], this.state.currentPoints[3] || this.state.currentPoints[1])}
+                                    width={Math.abs((this.state.currentPoints[2] || this.state.currentPoints[0]) - this.state.currentPoints[0])}
+                                    height={Math.abs((this.state.currentPoints[3] || this.state.currentPoints[1]) - this.state.currentPoints[1])}
+                                    stroke={this.props.color}
+                                    strokeWidth={this.props.penSize}
+                                    fill={this.props.isShapeFilled ? this.props.color : 'transparent'}
+                                />
+                            )}
+                            {this.props.shape === 'circle' && this.state.currentPoints.length >= 2 && (
+                                <Circle
+                                    x={this.state.currentPoints[0]}
+                                    y={this.state.currentPoints[1]}
+                                    radius={Math.sqrt(
+                                        Math.pow((this.state.currentPoints[2] || this.state.currentPoints[0]) - this.state.currentPoints[0], 2) +
+                                        Math.pow((this.state.currentPoints[3] || this.state.currentPoints[1]) - this.state.currentPoints[1], 2)
+                                    )}
+                                    stroke={this.props.color}
+                                    strokeWidth={this.props.penSize}
+                                    fill={this.props.isShapeFilled ? this.props.color : 'transparent'}
+                                />
+                            )}
+                        </>
+                    )}
+                </Layer>
+            </Stage>
         );
     }
 }
