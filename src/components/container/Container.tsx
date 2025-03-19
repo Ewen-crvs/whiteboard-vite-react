@@ -1,5 +1,6 @@
 import React from 'react';
 import Board from '../board/Board';
+import { exportToImage, loadImage } from '@/utils/image';
 import './style.css';
 
 type ContainerProps = object
@@ -47,17 +48,6 @@ class Container extends React.Component<ContainerProps, ContainerState> {
 
     handleClearBoard = (): void => {
         this.boardRef.current?.clearBoard();
-    };
-
-    exportToImage = (): void => {
-        const canvas = this.boardRef.current?.canvasRef.current;
-        if (!canvas) return;
-
-        const dataURL = canvas.toDataURL('image/png');
-        const link = document.createElement('a');
-        link.href = dataURL;
-        link.download = 'whiteboard.png';
-        link.click();
     };
 
     render(): React.ReactNode {
@@ -130,10 +120,22 @@ class Container extends React.Component<ContainerProps, ContainerState> {
                                 Clear Board
                             </button>
                             <button
-                                onClick={this.exportToImage}
+                                onClick={() => {
+                                    const canvas = this.boardRef.current?.canvasRef.current;
+                                    if (canvas) exportToImage(canvas);
+                                }}
                                 className="px-3 py-1.5 bg-blue-500 text-white border-none rounded text-sm cursor-pointer transition-colors hover:bg-blue-400 active:bg-blue-700"
                             >
                                 Export to Image
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const canvas = this.boardRef.current?.canvasRef.current;
+                                    if (canvas) loadImage(canvas);
+                                }}
+                                className="px-3 py-1.5 bg-green-500 text-white border-none rounded text-sm cursor-pointer transition-colors hover:bg-green-400 active:bg-green-700"
+                            >
+                                Load Image
                             </button>
                         </div>
                     </div>
