@@ -26,7 +26,7 @@ interface DrawingData {
 }
 
 class Board extends React.Component<BoardProps> {
-    private canvasRef = React.createRef<HTMLCanvasElement>();
+    public canvasRef = React.createRef<HTMLCanvasElement>();
     socket: Socket = io(`${import.meta.env.VITE_SERVER_URL}:${import.meta.env.VITE_SERVER_PORT}`, {
         transports: ["websocket"],
     });

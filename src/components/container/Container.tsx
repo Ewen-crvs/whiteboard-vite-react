@@ -49,6 +49,17 @@ class Container extends React.Component<ContainerProps, ContainerState> {
         this.boardRef.current?.clearBoard();
     };
 
+    exportToImage = (): void => {
+        const canvas = this.boardRef.current?.canvasRef.current;
+        if (!canvas) return;
+
+        const dataURL = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.href = dataURL;
+        link.download = 'whiteboard.png';
+        link.click();
+    };
+
     render(): React.ReactNode {
         return (
             <div>
@@ -117,6 +128,12 @@ class Container extends React.Component<ContainerProps, ContainerState> {
                                 className="px-3 py-1.5 bg-red-500 text-white border-none rounded text-sm cursor-pointer transition-colors hover:bg-red-400 active:bg-red-700"
                             >
                                 Clear Board
+                            </button>
+                            <button
+                                onClick={this.exportToImage}
+                                className="px-3 py-1.5 bg-blue-500 text-white border-none rounded text-sm cursor-pointer transition-colors hover:bg-blue-400 active:bg-blue-700"
+                            >
+                                Export to Image
                             </button>
                         </div>
                     </div>
