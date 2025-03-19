@@ -51,7 +51,7 @@ class Container extends React.Component<ContainerProps, ContainerState> {
 
     render(): React.ReactNode {
         return (
-            <div className="container w-full h-screen">
+            <div className="container w-full h-screen max-w-full max-h-full">
                 <div className="toolbar">
                     <div className="tool-group">
                         <label>Color:</label>
