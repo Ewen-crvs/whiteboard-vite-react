@@ -51,12 +51,12 @@ class Container extends React.Component<ContainerProps, ContainerState> {
 
     render(): React.ReactNode {
         return (
-            <div className="container">
+            <div className="container w-full h-screen">
                 <div className="toolbar">
                     <div className="tool-group">
                         <label>Color:</label>
-                        <input
-                            type="color"
+                        <input 
+                            type="color" 
                             value={this.state.color}
                             onChange={this.handleColorChange}
                             className="color-picker"
@@ -65,28 +65,28 @@ class Container extends React.Component<ContainerProps, ContainerState> {
 
                     <div className="tool-group">
                         <div className="shape-buttons">
-                            <button 
+                            <button
                                 className={`shape-button ${this.state.shape === 'freeform' ? 'active' : ''}`}
                                 onClick={() => this.handleShapeChange('freeform')}
                                 title="Freeform"
                             >
                                 <i className="fas fa-pencil-alt"></i>
                             </button>
-                            <button 
+                            <button
                                 className={`shape-button ${this.state.shape === 'line' ? 'active' : ''}`}
                                 onClick={() => this.handleShapeChange('line')}
                                 title="Line"
                             >
                                 <i className="fas fa-ruler"></i>
                             </button>
-                            <button 
+                            <button
                                 className={`shape-button ${this.state.shape === 'rectangle' ? 'active' : ''}`}
                                 onClick={() => this.handleShapeChange('rectangle')}
                                 title={`Rectangle (${this.state.isShapeFilled ? 'Filled' : 'Hollow'})`}
                             >
                                 <i className={`fa${this.state.isShapeFilled ? 's' : 'r'} fa-square`}></i>
                             </button>
-                            <button 
+                            <button
                                 className={`shape-button ${this.state.shape === 'circle' ? 'active' : ''}`}
                                 onClick={() => this.handleShapeChange('circle')}
                                 title={`Circle (${this.state.isShapeFilled ? 'Filled' : 'Hollow'})`}
