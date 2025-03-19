@@ -27,7 +27,7 @@ interface DrawingData {
 
 class Board extends React.Component<BoardProps> {
     private canvasRef = React.createRef<HTMLCanvasElement>();
-    socket: Socket = io("localhost:3001", {
+    socket: Socket = io(`${import.meta.env.VITE_SERVER_URL}:${import.meta.env.VITE_SERVER_PORT}`, {
         transports: ["websocket"],
     });
     ctx: CanvasRenderingContext2D | null = null;
