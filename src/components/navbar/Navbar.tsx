@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 interface UserProps {
     name?: string;
@@ -16,13 +16,13 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({
-                                           user = { name: 'Guest', avatarUrl: '', isLoggedIn: false },
-                                           logoSrc = '/logo.svg',
-                                           logoAlt = 'App Logo',
-                                           onLogin = () => console.log('Login clicked'),
-                                           onLogout = () => console.log('Logout clicked'),
-                                           onProfile = () => console.log('Profile clicked')
-                                       }) => {
+    user = { name: "Guest", avatarUrl: "", isLoggedIn: false },
+    logoSrc = "../../../public/vite.svg",
+    logoAlt = "App Logo",
+    onLogin = () => console.log("Login clicked"),
+    onLogout = () => console.log("Logout clicked"),
+    onProfile = () => console.log("Profile clicked"),
+}) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const toggleModal = () => {
@@ -46,14 +46,29 @@ const Navbar: React.FC<NavbarProps> = ({
                         onClick={toggleModal}
                     >
                         {user.avatarUrl ? (
-                            <img src={user.avatarUrl} alt="User Avatar" className="h-full w-full object-cover" />
+                            <img
+                                src={user.avatarUrl}
+                                alt="User Avatar"
+                                className="h-full w-full object-cover"
+                            />
                         ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5 text-gray-500"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                            >
+                                <path
+                                    fillRule="evenodd"
+                                    d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                                    clipRule="evenodd"
+                                />
                             </svg>
                         )}
                     </div>
-                    <span className="text-sm font-medium text-gray-700">{user.name}</span>
+                    <span className="text-sm font-medium text-gray-700">
+                        {user.name}
+                    </span>
 
                     {/* Modal utilisateur */}
                     {isModalOpen && (
@@ -63,7 +78,9 @@ const Navbar: React.FC<NavbarProps> = ({
                         >
                             <div className="bg-white rounded-lg shadow-lg mt-16 ml-6 w-64 overflow-hidden">
                                 <div className="p-4 border-b border-gray-200">
-                                    <h3 className="font-medium text-gray-900">Compte utilisateur</h3>
+                                    <h3 className="font-medium text-gray-900">
+                                        Compte utilisateur
+                                    </h3>
                                 </div>
                                 <div className="p-2">
                                     {!user.isLoggedIn ? (
@@ -74,10 +91,27 @@ const Navbar: React.FC<NavbarProps> = ({
                                             }}
                                             className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded transition-colors flex items-center gap-2"
                                         >
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V3zm2 0v12h12V3H5z" clipRule="evenodd" />
-                                                <path fillRule="evenodd" d="M10 9a1 1 0 011 1v5a1 1 0 11-2 0v-5a1 1 0 011-1z" clipRule="evenodd" />
-                                                <path fillRule="evenodd" d="M7 12a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" clipRule="evenodd" />
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                className="h-5 w-5"
+                                                viewBox="0 0 20 20"
+                                                fill="currentColor"
+                                            >
+                                                <path
+                                                    fillRule="evenodd"
+                                                    d="M3 3a1 1 0 011-1h12a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V3zm2 0v12h12V3H5z"
+                                                    clipRule="evenodd"
+                                                />
+                                                <path
+                                                    fillRule="evenodd"
+                                                    d="M10 9a1 1 0 011 1v5a1 1 0 11-2 0v-5a1 1 0 011-1z"
+                                                    clipRule="evenodd"
+                                                />
+                                                <path
+                                                    fillRule="evenodd"
+                                                    d="M7 12a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z"
+                                                    clipRule="evenodd"
+                                                />
                                             </svg>
                                             Connexion
                                         </button>
@@ -90,8 +124,17 @@ const Navbar: React.FC<NavbarProps> = ({
                                                 }}
                                                 className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded transition-colors flex items-center gap-2"
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    className="h-5 w-5"
+                                                    viewBox="0 0 20 20"
+                                                    fill="currentColor"
+                                                >
+                                                    <path
+                                                        fillRule="evenodd"
+                                                        d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                                                        clipRule="evenodd"
+                                                    />
                                                 </svg>
                                                 Mon profil
                                             </button>
@@ -102,8 +145,17 @@ const Navbar: React.FC<NavbarProps> = ({
                                                 }}
                                                 className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded transition-colors flex items-center gap-2"
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1H3zm11 4a1 1 0 10-2 0v6.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L14 13.586V7z" clipRule="evenodd" />
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    className="h-5 w-5"
+                                                    viewBox="0 0 20 20"
+                                                    fill="currentColor"
+                                                >
+                                                    <path
+                                                        fillRule="evenodd"
+                                                        d="M3 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1H3zm11 4a1 1 0 10-2 0v6.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L14 13.586V7z"
+                                                        clipRule="evenodd"
+                                                    />
                                                 </svg>
                                                 Déconnexion
                                             </button>
