@@ -1,6 +1,7 @@
 import React from 'react';
-import Board, { ShapeProps } from '../board/Board';
+import Board from '../board/Board';
 import Navbar from '../navbar/Navbar';
+import { ShapeProps } from '../../types';
 import './style.css';
 
 interface ContainerProps {}

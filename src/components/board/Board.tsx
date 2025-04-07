@@ -2,57 +2,15 @@ import React from "react";
 import { Stage, Layer, Line, Circle, Rect, Image } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 import { io, Socket } from "socket.io-client";
-
-interface Point {
-    x: number;
-    y: number;
-}
-
-export interface ShapeProps {
-    id: string;
-    points?: number[];
-    x?: number;
-    y?: number;
-    width?: number;
-    height?: number;
-    stroke: string;
-    strokeWidth: number;
-    fill?: string;
-    type: "line" | "rectangle" | "circle" | "freeform" | "image";
-    image?: HTMLImageElement;
-}
-
-interface BoardProps {
-    shape: "line" | "rectangle" | "circle" | "freeform" | "eraser" | "hand";
-    color: string;
-    penSize: number;
-    isShapeFilled: boolean;
-}
-
-interface BoardState {
-    shapes: ShapeProps[];
-    isDrawing: boolean;
-    currentPoints: number[];
-    mousePos: Point | null;
-    currentDragId: string | null;
-    history: ShapeProps[][]; // Pour stocker l'historique
-    historyIndex: number; // Index actuel dans l'historique
-}
+import { Point, ShapeProps, BoardProps, BoardState } from "../../types";
 
 class Board extends React.Component<BoardProps, BoardState> {
-    // Helper method to calculate distance from a point to a line segment
     private distanceToSegment = (point: Point, v: Point, w: Point): number => {
-        // Calculate squared length of segment
         const l2 = Math.pow(w.x - v.x, 2) + Math.pow(w.y - v.y, 2);
-        if (l2 === 0) return Math.sqrt(Math.pow(point.x - v.x, 2) + Math.pow(point.y - v.y, 2)); // v == w case
+        if (l2 === 0) return Math.sqrt(Math.pow(point.x - v.x, 2) + Math.pow(point.y - v.y, 2));
         
-        // Consider the line extending the segment, parameterized as v + t (w - v)
-        // We find projection of point p onto the line. 
-        // It falls where t = [(p-v) . (w-v)] / |w-v|^2
-        // We clamp t from [0,1] to handle points outside the segment vw.
         const t = Math.max(0, Math.min(1, ((point.x - v.x) * (w.x - v.x) + (point.y - v.y) * (w.y - v.y)) / l2));
         
-        // Projection falls on the segment
         const projection = { 
             x: v.x + t * (w.x - v.x),
             y: v.y + t * (w.y - v.y) 
@@ -71,13 +29,13 @@ class Board extends React.Component<BoardProps, BoardState> {
             currentPoints: [],
             mousePos: null,
             currentDragId: null,
-            history: [[]], // Historique initial avec un tableau vide
-            historyIndex: 0, // Commence à 0
+            history: [[]],
+            historyIndex: 0
         };
     }
     componentDidMount() {
         try {
-            this.socket = io("localhost:6001", {
+            this.socket = io("10.26.129.199:6001", {
                 reconnectionAttempts: 5,
                 reconnectionDelay: 1000,
                 timeout: 10000
@@ -90,18 +48,54 @@ class Board extends React.Component<BoardProps, BoardState> {
             this.setState({ shapes });
         });
 
-        this.socket.on("draw", (shape: ShapeProps) => {
-            // Validate that shape is not null before processing
-            if (!shape) return;
+        this.socket.on("draw", (data: any) => {
+            if (!data || !data.shape) return;
             
-            this.setState(
-                (prevState) => ({
-                    shapes: prevState.shapes.some((s) => s && s.id === shape.id)
-                        ? prevState.shapes
-                        : [...prevState.shapes, shape],
-                }),
-                () => this.saveToHistory()
-            );
+            const shape = data.shape;
+            
+            if (shape.type === 'image' && shape.imageDataUrl) {
+                try {
+                    const img = document.createElement('img') as HTMLImageElement;
+                    img.crossOrigin = 'anonymous';
+                    
+                    img.onload = (): void => {
+
+                        const completeShape: ShapeProps = {
+                            ...shape,
+                            image: img
+                        };
+                        
+
+                        this.setState(
+                            (prevState) => ({
+                                shapes: prevState.shapes.some((s) => s && s.id === completeShape.id)
+                                    ? prevState.shapes
+                                    : [...prevState.shapes, completeShape],
+                            }),
+                            () => this.saveToHistory()
+                        );
+                    };
+                    
+                    img.onerror = (): void => {
+                        console.error('Failed to load image from data URL');
+                    };
+                    
+
+                    img.src = shape.imageDataUrl;
+                } catch (error) {
+                    console.error('Error processing received image:', error);
+                }
+            } else {
+
+                this.setState(
+                    (prevState) => ({
+                        shapes: prevState.shapes.some((s) => s && s.id === shape.id)
+                            ? prevState.shapes
+                            : [...prevState.shapes, shape],
+                    }),
+                    () => this.saveToHistory()
+                );
+            }
         });
 
         this.socket.on(
@@ -129,6 +123,13 @@ class Board extends React.Component<BoardProps, BoardState> {
 
         this.socket.on("load-drawings", (shapes: ShapeProps[]) => {
             this.setState({ shapes }, () => this.saveToHistory());
+        });
+
+        // Listen for erase events from other clients
+        this.socket.on("erase", (data: { shapes: ShapeProps[] }) => {
+            if (data && data.shapes) {
+                this.setState({ shapes: data.shapes }, () => this.saveToHistory());
+            }
         });
 
         this.saveToHistory();
@@ -183,7 +184,7 @@ class Board extends React.Component<BoardProps, BoardState> {
             });
 
         if (!statesAreEqual) {
-            // Filter out any null or undefined shapes before saving to history
+
             const validShapes = shapes.filter(shape => shape !== null && shape !== undefined);
             newHistory.push([...validShapes]);
 
@@ -196,7 +197,7 @@ class Board extends React.Component<BoardProps, BoardState> {
 
     public undo = (): void => {
         this.setState((prevState) => {
-            if (prevState.historyIndex <= 0) return null; // Ne peut pas undo plus loin
+            if (prevState.historyIndex <= 0) return null;
 
             const newIndex = prevState.historyIndex - 1;
             const newShapes = [...prevState.history[newIndex]];
@@ -228,40 +229,89 @@ class Board extends React.Component<BoardProps, BoardState> {
     };
 
     addShape = (shape: ShapeProps): void => {
-        this.setState(
-            (prevState) => ({
-                shapes: [...prevState.shapes, shape],
-            }),
-            () => {
-                this.saveToHistory();
-                this.socket.emit("draw", { channel: "default", shape: shape });
+
+        if (shape.type === 'image' && shape.image instanceof HTMLImageElement) {
+            try {
+
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = shape.width || 0;
+                tempCanvas.height = shape.height || 0;
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                if (tempCtx) {
+
+                    if (shape.image.complete && shape.image.naturalHeight !== 0) {
+
+                        tempCtx.drawImage(shape.image, 0, 0, tempCanvas.width, tempCanvas.height);
+                        
+
+                        const imageDataUrl = tempCanvas.toDataURL('image/png');
+                        
+
+                        const serializableShape = {
+                            ...shape,
+                            imageDataUrl,
+
+                            image: undefined
+                        };
+                        
+
+                        this.setState(
+                            (prevState) => ({
+                                shapes: [...prevState.shapes, shape],
+                            }),
+                            () => {
+                                this.saveToHistory();
+
+                                this.socket.emit("draw", { channel: "default", shape: serializableShape });
+                            }
+                        );
+                    } else {
+                        console.error('Image not fully loaded yet');
+                    }
+                } else {
+                    console.error('Failed to get canvas context for image serialization');
+                }
+            } catch (error) {
+                console.error('Error processing image for transmission:', error);
             }
-        );
+        } else {
+            // For non-image shapes, proceed normally
+            this.setState(
+                (prevState) => ({
+                    shapes: [...prevState.shapes, shape],
+                }),
+                () => {
+                    this.saveToHistory();
+                    this.socket.emit("draw", { channel: "default", shape: shape });
+                }
+            );
+        }
     };
 
     private handleKeyDown = (event: KeyboardEvent): void => {
-        // Vérifier si Ctrl+Z (ou Cmd+Z sur Mac) est pressé pour undo
+
         if (
             (event.ctrlKey || event.metaKey) &&
             event.key === "z" &&
             !event.shiftKey
         ) {
-            // Empêcher le comportement par défaut du navigateur
+
             event.preventDefault();
 
-            // Appeler la fonction d'annulation
+
             this.undo();
         }
 
-        // Vérifier si Ctrl+Y ou Ctrl+Shift+Z est pressé pour redo
+
         if (
             (event.ctrlKey || event.metaKey) &&
             (event.key === "y" || (event.key === "z" && event.shiftKey))
         ) {
-            // Empêcher le comportement par défaut du navigateur
+
             event.preventDefault();
 
-            // Appeler la fonction de rétablissement
+
             this.redo();
         }
     };
@@ -314,18 +364,18 @@ class Board extends React.Component<BoardProps, BoardState> {
                 currentPoints: [...prevState.currentPoints, point.x, point.y],
             }));
         } else if (this.props.shape === "eraser") {
-            // For eraser, check if it intersects with any shape and remove it
+
             this.setState((prevState) => {
-                // Check if the eraser touches any shape
+
                 const shapesToKeep = prevState.shapes.filter(shape => {
                     if (!shape) return false; // Skip null/undefined shapes
                     
-                    // Check if the point is within the shape's bounds
+    
                     if (shape.type === "rectangle") {
                         // Make sure all required properties exist
                         if (shape.x === undefined || shape.y === undefined || 
                             shape.width === undefined || shape.height === undefined) {
-                            return true; // Keep shapes with missing properties
+                            return true;
                         }
                         
                         return !(
@@ -338,7 +388,7 @@ class Board extends React.Component<BoardProps, BoardState> {
                         // Make sure all required properties exist
                         if (shape.x === undefined || shape.y === undefined || 
                             shape.width === undefined || shape.height === undefined) {
-                            return true; // Keep shapes with missing properties
+                            return true;
                         }
                         
                         const centerX = shape.x + shape.width / 2;
@@ -350,10 +400,10 @@ class Board extends React.Component<BoardProps, BoardState> {
                         );
                         return distance > radius;
                     } else if (shape.type === "line" || shape.type === "freeform") {
-                        // For lines and freeform, check if the point is close to any segment
+
                         if (!shape.points || shape.points.length < 2) return true;
                         
-                        // Check proximity to line segments
+
                         for (let i = 0; i < shape.points.length - 2; i += 2) {
                             const x1 = shape.points[i];
                             const y1 = shape.points[i + 1];
@@ -370,7 +420,7 @@ class Board extends React.Component<BoardProps, BoardState> {
                         // Make sure all required properties exist
                         if (shape.x === undefined || shape.y === undefined || 
                             shape.width === undefined || shape.height === undefined) {
-                            return true; // Keep shapes with missing properties
+                            return true;
                         }
                         
                         return !(
@@ -385,9 +435,10 @@ class Board extends React.Component<BoardProps, BoardState> {
                 
                 // If shapes were removed, notify other clients
                 if (shapesToKeep.length < prevState.shapes.length) {
-                    this.socket.emit("draw", {
+                    // Emit a specific 'erase' event with the updated shapes array
+                    this.socket.emit("erase", {
                         channel: "default",
-                        shapes: shapesToKeep,
+                        shapes: shapesToKeep
                     });
                     // Save to history after removing shapes
                     this.saveToHistory();
@@ -575,7 +626,7 @@ class Board extends React.Component<BoardProps, BoardState> {
                         } else if (shape.type === "rectangle") {
                             if (shape.x === undefined || shape.y === undefined || 
                                 shape.width === undefined || shape.height === undefined) {
-                                return null; // Skip rendering if missing required properties
+                                return null;
                             }
                             
                             return (
@@ -603,7 +654,7 @@ class Board extends React.Component<BoardProps, BoardState> {
                         } else if (shape.type === "circle") {
                             if (shape.x === undefined || shape.y === undefined || 
                                 shape.width === undefined || shape.height === undefined) {
-                                return null; // Skip rendering if missing required properties
+                                return null;
                             }
                             
                             return (
@@ -630,32 +681,57 @@ class Board extends React.Component<BoardProps, BoardState> {
                                     }
                                 />
                             );
-                        } else if (shape.type === "image" && shape.image) {
+                        } else if (shape.type === "image") {
                             if (shape.x === undefined || shape.y === undefined || 
                                 shape.width === undefined || shape.height === undefined) {
-                                return null; // Skip rendering if missing required properties
+                                return null;
                             }
                             
-                            return (
-                                <Image
-                                    key={i}
-                                    x={shape.x}
-                                    y={shape.y}
-                                    width={shape.width}
-                                    height={shape.height}
-                                    image={shape.image}
-                                    draggable={this.props.shape === "hand"}
-                                    onDragStart={(e) =>
-                                        this.handleDragStart(e, shape.id)
+
+                            if (shape.image instanceof HTMLImageElement) {
+                                try {
+
+                                    if (shape.image.complete && shape.image.naturalHeight !== 0) {
+                                        return (
+                                            <Image
+                                                key={i}
+                                                x={shape.x}
+                                                y={shape.y}
+                                                width={shape.width}
+                                                height={shape.height}
+                                                image={shape.image}
+                                                draggable={this.props.shape === "hand"}
+                                                onDragStart={(e) =>
+                                                    this.handleDragStart(e, shape.id)
+                                                }
+                                                onDragMove={(e) =>
+                                                    this.handleDragMove(e, shape.id)
+                                                }
+                                                onDragEnd={(e) =>
+                                                    this.handleDragEnd(e, shape.id)
+                                                }
+                                            />
+                                        );
                                     }
-                                    onDragMove={(e) =>
-                                        this.handleDragMove(e, shape.id)
-                                    }
-                                    onDragEnd={(e) =>
-                                        this.handleDragEnd(e, shape.id)
-                                    }
-                                />
-                            );
+                                } catch (error) {
+                                    console.error('Error rendering image:', error);
+                                }
+                            } else if (shape.imageDataUrl) {
+
+                                const img = document.createElement('img') as HTMLImageElement;
+                                img.crossOrigin = 'anonymous';
+                                img.src = shape.imageDataUrl;
+                                
+
+                                setTimeout(() => {
+                                    this.setState(prevState => ({
+                                        shapes: prevState.shapes.map(s => 
+                                            s && s.id === shape.id ? { ...s, image: img } : s
+                                        )
+                                    }));
+                                }, 100);
+                            }
+                            return null;
                         }
                         return null;
                     })}

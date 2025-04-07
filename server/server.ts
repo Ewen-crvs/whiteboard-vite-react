@@ -35,6 +35,17 @@ io.on("connection", (socket: Socket) => {
         io.to(channel).emit("draw", shape);
     });
 
+    socket.on("erase", ({ channel, shapes }) => {
+        if (!drawings[channel]) {
+            drawings[channel] = [];
+        }
+        // Update the server's record of drawings with the new shapes array after erasure
+        drawings[channel] = shapes;
+        // Broadcast the updated shapes to all clients in the channel
+        io.to(channel).emit("erase", { shapes: drawings[channel] });
+        console.log(`Erase action in channel: ${channel}, shapes remaining: ${shapes.length}`);
+    });
+
     socket.on("clear", (channel: string) => {
         drawings[channel] = [];
         io.to(channel).emit("clear");
