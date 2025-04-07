@@ -6,7 +6,7 @@ services:
         container_name: vite-fullstack
         ports:
             - "3000:3000" # Frontend
-            - "6000:6000" # Backend
+            - "6001:6001" # Backend
         volumes:
             - ./src:/app/src
             - ./public:/app/public
