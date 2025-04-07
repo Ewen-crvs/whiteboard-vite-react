@@ -718,26 +718,36 @@ class Board extends React.Component<BoardProps, BoardState> {
                             {this.props.shape === "circle" &&
                                 this.state.currentPoints.length >= 2 && (
                                     <Circle
-                                        x={this.state.currentPoints[0]}
-                                        y={this.state.currentPoints[1]}
-                                        radius={Math.sqrt(
-                                            Math.pow(
+                                        x={Math.min(
+                                            this.state.currentPoints[0],
+                                            this.state.currentPoints[2] ||
+                                                this.state.currentPoints[0]
+                                        ) + Math.abs(
+                                            (this.state.currentPoints[2] ||
+                                                this.state.currentPoints[0]) -
+                                                this.state.currentPoints[0]
+                                        ) / 2}
+                                        y={Math.min(
+                                            this.state.currentPoints[1],
+                                            this.state.currentPoints[3] ||
+                                                this.state.currentPoints[1]
+                                        ) + Math.abs(
+                                            (this.state.currentPoints[3] ||
+                                                this.state.currentPoints[1]) -
+                                                this.state.currentPoints[1]
+                                        ) / 2}
+                                        radius={Math.max(
+                                            Math.abs(
                                                 (this.state.currentPoints[2] ||
-                                                    this.state
-                                                        .currentPoints[0]) -
-                                                    this.state.currentPoints[0],
-                                                2
-                                            ) +
-                                                Math.pow(
-                                                    (this.state
-                                                        .currentPoints[3] ||
-                                                        this.state
-                                                            .currentPoints[1]) -
-                                                        this.state
-                                                            .currentPoints[1],
-                                                    2
-                                                )
-                                        )}
+                                                    this.state.currentPoints[0]) -
+                                                    this.state.currentPoints[0]
+                                            ),
+                                            Math.abs(
+                                                (this.state.currentPoints[3] ||
+                                                    this.state.currentPoints[1]) -
+                                                    this.state.currentPoints[1]
+                                            )
+                                        ) / 2}
                                         stroke={this.props.color}
                                         strokeWidth={this.props.penSize}
                                         fill={
