@@ -35,6 +35,8 @@ interface BoardState {
     currentPoints: number[];
     mousePos: Point | null;
     currentDragId: string | null;
+    history: ShapeProps[][]; // Pour stocker l'historique
+    historyIndex: number; // Index actuel dans l'historique
 }
 
 class Board extends React.Component<BoardProps, BoardState> {
@@ -49,18 +51,26 @@ class Board extends React.Component<BoardProps, BoardState> {
             currentPoints: [],
             mousePos: null,
             currentDragId: null,
+            history: [[]], // Historique initial avec un tableau vide
+            historyIndex: 0, // Commence à 0
         };
     }
     componentDidMount() {
-        this.socket = io("localhost:5000");
+        this.socket = io("localhost:6000");
         this.socket.emit("join-channel", "default");
+        this.socket.on("undo", (shapes: ShapeProps[]) => {
+            this.setState({ shapes });
+        });
+        this.socket.on("redo", (shapes: ShapeProps[]) => {
+            this.setState({ shapes });
+        });
 
         this.socket.on("draw", (shape: ShapeProps) => {
             this.setState((prevState) => ({
                 shapes: prevState.shapes.some((s) => s.id === shape.id)
                     ? prevState.shapes
                     : [...prevState.shapes, shape],
-            }));
+            }), () => this.saveToHistory());
         });
 
         this.socket.on(
@@ -73,23 +83,29 @@ class Board extends React.Component<BoardProps, BoardState> {
                             ? { ...shape, x: data.x, y: data.y }
                             : shape
                     ),
-                }));
+                }), () => this.saveToHistory());
             }
         );
 
         this.socket.on("clear", () => {
-            this.setState({ shapes: [], currentDragId: null });
+            this.setState({ shapes: [], currentDragId: null }, () => this.saveToHistory());
         });
 
         this.socket.on("load-drawings", (shapes: ShapeProps[]) => {
-            this.setState({ shapes });
+            this.setState({ shapes }, () => this.saveToHistory());
         });
+
+        this.saveToHistory();
+
+        document.addEventListener('keydown', this.handleKeyDown);
     }
 
     componentWillUnmount(): void {
         if (this.socket) {
             this.socket.disconnect();
         }
+
+        document.removeEventListener('keydown', this.handleKeyDown);
     }
 
     componentDidUpdate(prevProps: BoardProps) {
@@ -107,11 +123,92 @@ class Board extends React.Component<BoardProps, BoardState> {
         }
     }
 
+    private saveToHistory = (): void => {
+        const { history, historyIndex, shapes } = this.state;
+
+        const newHistory = history.slice(0, historyIndex + 1);
+
+        const lastState = newHistory[newHistory.length - 1] || [];
+        const statesAreEqual = lastState.length === shapes.length &&
+            lastState.every((shape, index) => {
+                const currentShape = shapes[index];
+                return shape.id === currentShape.id &&
+                    shape.x === currentShape.x &&
+                    shape.y === currentShape.y;
+            });
+
+        if (!statesAreEqual) {
+            newHistory.push([...shapes]);
+
+            this.setState({
+                history: newHistory,
+                historyIndex: newHistory.length - 1,
+            });
+        }
+    };
+
+    public undo = (): void => {
+        this.setState((prevState) => {
+            if (prevState.historyIndex <= 0) return null; // Ne peut pas undo plus loin
+
+            const newIndex = prevState.historyIndex - 1;
+            const newShapes = [...prevState.history[newIndex]];
+
+            this.socket.emit("undo", { channel: "default", shapes: newShapes });
+
+            return {
+                shapes: newShapes,
+                historyIndex: newIndex,
+            };
+        });
+    };
+
+    public redo = (): void => {
+        this.setState((prevState) => {
+            if (prevState.historyIndex >= prevState.history.length - 1) return null;
+
+            const newIndex = prevState.historyIndex + 1;
+            const newShapes = [...prevState.history[newIndex]];
+
+            this.socket.emit("redo", { channel: "default", shapes: newShapes });
+
+            return {
+                shapes: newShapes,
+                historyIndex: newIndex,
+            };
+        });
+    };
+
     addShape = (shape: ShapeProps): void => {
-        this.setState((prevState) => ({
-            shapes: [...prevState.shapes, shape],
-        }));
-        this.socket.emit("draw", { channel: "default", shape: shape });
+        this.setState(
+            (prevState) => ({
+                shapes: [...prevState.shapes, shape],
+            }),
+            () => {
+                this.saveToHistory();
+                this.socket.emit("draw", { channel: "default", shape: shape });
+            }
+        );
+    };
+
+    private handleKeyDown = (event: KeyboardEvent): void => {
+        // Vérifier si Ctrl+Z (ou Cmd+Z sur Mac) est pressé pour undo
+        if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+            // Empêcher le comportement par défaut du navigateur
+            event.preventDefault();
+
+            // Appeler la fonction d'annulation
+            this.undo();
+        }
+
+        // Vérifier si Ctrl+Y ou Ctrl+Shift+Z est pressé pour redo
+        if ((event.ctrlKey || event.metaKey) && (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
+            // Empêcher le comportement par défaut du navigateur
+            event.preventDefault();
+
+            // Appeler la fonction de rétablissement
+            this.redo();
+        }
     };
 
     handleMouseDown = (e: KonvaEventObject<MouseEvent>): void => {
@@ -148,7 +245,6 @@ class Board extends React.Component<BoardProps, BoardState> {
         const point = stage.getPointerPosition();
         if (!point) return;
 
-        // For shapes, we only need start point and current point
         if (this.props.shape === "rectangle" || this.props.shape === "circle") {
             this.setState({
                 currentPoints: [
@@ -159,7 +255,6 @@ class Board extends React.Component<BoardProps, BoardState> {
                 ],
             });
         }
-        // For freeform and eraser, we append points
         else if (
             this.props.shape === "freeform" ||
             this.props.shape === "eraser"
@@ -168,7 +263,6 @@ class Board extends React.Component<BoardProps, BoardState> {
                 currentPoints: [...prevState.currentPoints, point.x, point.y],
             }));
         }
-        // For line, we update end point
         else if (this.props.shape === "line") {
             this.setState({
                 currentPoints: [
@@ -228,9 +322,10 @@ class Board extends React.Component<BoardProps, BoardState> {
 
         this.setState((prevState) => ({
             shapes: [...prevState.shapes, newShape],
-        }));
-
-        this.socket.emit("draw", { channel: "default", shape: newShape });
+        }), () => {
+            this.saveToHistory();
+            this.socket.emit("draw", { channel: "default", shape: newShape });
+        });
     };
 
     handleDragStart = (_e: KonvaEventObject<DragEvent>, id: string): void => {
@@ -268,20 +363,22 @@ class Board extends React.Component<BoardProps, BoardState> {
                 s.id === id ? { ...s, x: newX, y: newY } : s
             ),
             currentDragId: null,
-        }));
-
-        this.socket.emit("shape-moved", { id, x: newX, y: newY });
+        }), () => {
+            this.saveToHistory();
+            this.socket.emit("shape-moved", { id, x: newX, y: newY });
+        });
     };
 
     clearBoard = (): void => {
-        const stage = this.stageRef.current;
-        if (stage) {
-            const layer = stage.getLayers()[0];
-            layer.removeChildren();
-            layer.batchDraw();
-        }
-        this.setState({ shapes: [], currentDragId: null });
-        this.socket.emit("clear", "default");
+        this.setState({
+            shapes: [],
+            currentDragId: null,
+            history: [[]],  // Réinitialiser avec un tableau vide
+            historyIndex: 0,
+        }, () => {
+            this.saveToHistory(); // Sauvegarde dans l'historique après nettoyage
+            this.socket.emit("clear", "default");
+        });
     };
 
     render(): React.ReactNode {

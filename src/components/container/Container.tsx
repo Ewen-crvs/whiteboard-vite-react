@@ -38,6 +38,14 @@ class Container extends React.Component<ContainerProps, ContainerState> {
         }
     };
 
+    handleUndo = (): void => {
+        this.boardRef.current?.undo();
+    };
+
+    handleRedo = (): void => {
+        this.boardRef.current?.redo();
+    };
+
     handlePenSizeChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
         const size = parseInt(e.target.value);
         this.setState({ penSize: size });
@@ -184,6 +192,20 @@ class Container extends React.Component<ContainerProps, ContainerState> {
                     </div>
 
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={this.handleUndo}
+                            className="px-3 py-1.5 bg-gray-500 text-white border-none rounded text-sm cursor-pointer transition-colors hover:bg-gray-400 active:bg-gray-700"
+                            title="Undo (Ctrl+Z)"
+                        >
+                            <i className="fas fa-undo mr-1"></i> Undo
+                        </button>
+                        <button
+                            onClick={this.handleRedo}
+                            className="px-3 py-1.5 bg-gray-500 text-white border-none rounded text-sm cursor-pointer transition-colors hover:bg-gray-400 active:bg-gray-700"
+                            title="Redo (Ctrl+Y or Ctrl+Shift+Z)"
+                        >
+                            <i className="fas fa-redo mr-1"></i> Redo
+                        </button>
                         <button
                             onClick={this.handleClearBoard}
                             className="px-3 py-1.5 bg-red-500 text-white border-none rounded text-sm cursor-pointer transition-colors hover:bg-red-400 active:bg-red-700"

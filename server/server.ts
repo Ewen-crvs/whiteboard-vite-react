@@ -46,6 +46,6 @@ io.on("connection", (socket: Socket) => {
     });
 });
 
-server.listen(5000, () => {
+server.listen(6000, () => {
     console.log("Serveur en écoute sur http://localhost:3001");
 });
