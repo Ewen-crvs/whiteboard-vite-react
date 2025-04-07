@@ -85,7 +85,7 @@ class Container extends React.Component<ContainerProps, ContainerState> {
 
                             {/* Shape Tools */}
                             <div className="flex flex-col items-center gap-2">
-                                <div className="flex flex-col gap-2">
+                                <div className="grid grid-cols-2 gap-2">
                                     <button
                                         className={`w-10 h-10 border border-gray-300 rounded bg-white text-gray-600 cursor-pointer flex items-center justify-center transition-all duration-200 hover:bg-gray-100 hover:border-gray-500 hover:text-gray-800 ${this.state.shape === 'hand' ? 'bg-blue-50 border-blue-500 text-blue-500' : ''}`}
                                         onClick={() => this.handleShapeChange('hand')}
