@@ -35,6 +35,14 @@ io.on("connection", (socket: Socket) => {
         io.to(channel).emit("draw", shape);
     });
 
+    socket.on("undo", (data) => {
+        socket.to(data.channel).emit("undo", data.shapes);
+    });
+
+    socket.on("redo", (data) => {
+        socket.to(data.channel).emit("redo", data.shapes);
+    });
+
     socket.on("erase", ({ channel, shapes }) => {
         if (!drawings[channel]) {
             drawings[channel] = [];
