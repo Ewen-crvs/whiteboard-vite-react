@@ -32,14 +32,27 @@ io.on("connection", (socket: Socket) => {
             drawings[channel] = [];
         }
         drawings[channel].push(shape);
-        io.to(channel).emit("draw", shape);
+        // Use socket.to() to broadcast to all clients EXCEPT the sender
+        socket.to(channel).emit("draw", { shape });
     });
 
     socket.on("undo", (data) => {
+        if (!drawings[data.channel]) {
+            drawings[data.channel] = [];
+        }
+        // Update the server's record with the shapes after undo
+        drawings[data.channel] = data.shapes;
+        // Broadcast to all OTHER clients in the channel
         socket.to(data.channel).emit("undo", data.shapes);
     });
 
     socket.on("redo", (data) => {
+        if (!drawings[data.channel]) {
+            drawings[data.channel] = [];
+        }
+        // Update the server's record with the shapes after redo
+        drawings[data.channel] = data.shapes;
+        // Broadcast to all OTHER clients in the channel
         socket.to(data.channel).emit("redo", data.shapes);
     });
 
