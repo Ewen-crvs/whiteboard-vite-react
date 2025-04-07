@@ -20,6 +20,8 @@ class Board extends React.Component<BoardProps, BoardState> {
     };
     public stageRef = React.createRef<any>();
     private socket!: Socket;
+    private lastDragTime = 0;
+    private dragThrottleInterval = 50; // Throttle to 50ms
 
     constructor(props: BoardProps) {
         super(props);
@@ -530,19 +532,62 @@ class Board extends React.Component<BoardProps, BoardState> {
     handleDragMove = (e: KonvaEventObject<DragEvent>, id: string) => {
         if (this.props.shape !== "hand") return;
 
+        const now = Date.now();
+        // Throttle the drag events to reduce network traffic and improve performance
+        const shouldEmit = now - this.lastDragTime > this.dragThrottleInterval;
+
         const shape = e.target;
         const newX = shape.x();
         const newY = shape.y();
 
+        // Find the shape in our state
+        const targetShape = this.state.shapes.find(s => s.id === id);
+        
         // Update position locally
         this.setState((prevState) => ({
-            shapes: prevState.shapes.map((s) =>
-                s.id === id ? { ...s, x: newX, y: newY } : s
-            ),
+            shapes: prevState.shapes.map((s) => {
+                if (s.id === id) {
+                    // Handle circle differently than other shapes
+                    if (s.type === "circle" && s.width !== undefined && s.height !== undefined) {
+                        // For circles, we need to adjust the x,y to be the top-left corner
+                        // since the circle is centered at (x + width/2, y + height/2)
+                        return { 
+                            ...s, 
+                            x: newX - s.width / 2, 
+                            y: newY - s.height / 2 
+                        };
+                    } else {
+                        // For other shapes, just use the position directly
+                        return { ...s, x: newX, y: newY };
+                    }
+                }
+                return s;
+            }),
         }));
 
-        // Notify other clients
-        this.socket.emit("shape-moved", { id, x: newX, y: newY });
+        // Only emit socket event if enough time has passed since the last emit
+        if (shouldEmit) {
+            this.lastDragTime = now;
+            
+            // If it's a circle, we need to send the adjusted coordinates
+            if (targetShape && targetShape.type === "circle" && 
+                targetShape.width !== undefined && targetShape.height !== undefined) {
+                this.socket.emit("shape-moved", { 
+                    id, 
+                    x: newX - targetShape.width / 2, 
+                    y: newY - targetShape.height / 2,
+                    channel: "default"
+                });
+            } else {
+                // For other shapes, send the coordinates as is
+                this.socket.emit("shape-moved", { 
+                    id, 
+                    x: newX, 
+                    y: newY,
+                    channel: "default"
+                });
+            }
+        }
     };
 
     handleDragEnd = (e: KonvaEventObject<DragEvent>, id: string) => {
@@ -552,11 +597,28 @@ class Board extends React.Component<BoardProps, BoardState> {
         const newX = shape.x();
         const newY = shape.y();
 
+        // Find the shape in our state
+        const targetShape = this.state.shapes.find(s => s.id === id);
+
         this.setState(
             (prevState) => ({
-                shapes: prevState.shapes.map((s) =>
-                    s.id === id ? { ...s, x: newX, y: newY } : s
-                ),
+                shapes: prevState.shapes.map((s) => {
+                    if (s.id === id) {
+                        // Handle circle differently than other shapes
+                        if (s.type === "circle" && s.width !== undefined && s.height !== undefined) {
+                            // For circles, we need to adjust the x,y to be the top-left corner
+                            return { 
+                                ...s, 
+                                x: newX - s.width / 2, 
+                                y: newY - s.height / 2 
+                            };
+                        } else {
+                            // For other shapes, just use the position directly
+                            return { ...s, x: newX, y: newY };
+                        }
+                    }
+                    return s;
+                }),
                 currentDragId: null,
             }),
             () => {

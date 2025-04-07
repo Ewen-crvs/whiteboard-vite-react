@@ -73,6 +73,20 @@ io.on("connection", (socket: Socket) => {
         console.log(`Clear demandé pour le channel ${channel}`);
     });
 
+    socket.on("shape-moved", (data) => {
+        const { id, x, y, channel = "default" } = data;
+        
+        // Update the shape position in the server's record
+        if (drawings[channel]) {
+            drawings[channel] = drawings[channel].map(shape => 
+                shape.id === id ? { ...shape, x, y } : shape
+            );
+        }
+        
+        // Broadcast the shape movement to all OTHER clients in the channel
+        socket.to(channel).emit("shape-moved", { id, x, y });
+    });
+
     socket.on("disconnect", () => {
         console.log("Un utilisateur s'est déconnecté");
     });
