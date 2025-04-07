@@ -52,7 +52,7 @@ class Board extends React.Component<BoardProps, BoardState> {
         };
     }
     componentDidMount() {
-        this.socket = io("localhost:3001");
+        this.socket = io("localhost:5000");
         this.socket.emit("join-channel", "default");
 
         this.socket.on("draw", (shape: ShapeProps) => {
